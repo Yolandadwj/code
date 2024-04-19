@@ -1,0 +1,73 @@
+##group 1: reading alzheimer's disease and post-traumatic stress disorder.
+##group 2: reading alzheimer's disease and anxiety disorders.
+##group 3: reading alzheimer's disease and major depressive disorder.
+
+library(data.table)
+library(dplyr)
+source("FunctionSet.R")
+in_file_1 <- fread("bip_noukbb.tsv")
+in_file_2 <- fread("GCST007320_GRCh37.tsv")
+n<-as.matrix(c(413466))
+N<-matrix(rep(n,times=7605225),nrow=7605225,ncol=1,byrow=T)
+f_1<-as.data.frame(cbind(in_file_1$SNP,in_file_1$CHR,in_file_1$BP,in_file_1$A1,in_file_1$A2,
+                         in_file_1$BETA,in_file_1$SE,in_file_1$P,N))
+names(f_1)<-c("rsid","CHR","POS","Allele1","Allele2","BETA","SE","p_value","N")
+f_1 <- f_1[,1:8]
+n2<-as.matrix(c(455258))
+N2<-matrix(rep(n,times=13367299),nrow=13367299,ncol = 1,byrow = T)
+f_2<-as.data.frame(cbind(in_file_2$SNP,in_file_2$CHR,in_file_2$BP,in_file_2$A1,in_file_2$A2,
+                         in_file_2$BETA,in_file_2$SE,in_file_2$P,N2))
+names(f_2)<-c("rsid","CHR","POS","Allele1","Allele2","BETA","SE","p_value","N")
+f_2 <- f_2[,1:8]
+f_1$BETA<-as.numeric(f_1$BETA)
+f_1$SE<-as.numeric(f_1$SE)
+f_1$Z<-f_1$BETA/f_1$SE
+f_2$BETA<-as.numeric(f_2$BETA)
+f_2$SE<-as.numeric(f_2$SE)
+f_2$Z<-f_2$BETA/f_2$SE
+f_1_Samplesize = max(N)
+f_1_1 = subset(f_1, N > 0.7*f_1_Samplesize)
+f_1_MedianSamplesize = median(N)
+f_2_Samplesize = max(N2)
+f_2_1 = subset(f_2, N > 0.7*f_2_Samplesize)
+f_2_MedianSamplesize = median(N2)
+SampleSizes = c(f_1_MedianSamplesize, f_2_MedianSamplesize)
+library(plyr)
+clapbeat = f_1[, c(1, 9)]
+colnames(clapbeat) = c("MarkerName", "Clapbeat")
+dyslexia = f_2[, c(1, 9)]
+colnames(dyslexia) = c("MarkerName", "Dyslexia")
+one_data_frame_to_rule_them_all = as.data.frame(join(clapbeat, dyslexia, type = "inner"))
+one_data_frame_to_rule_them_all=one_data_frame_to_rule_them_all[order(one_data_frame_to_rule_them_all$MarkerName),]
+one_data_frame_to_rule_them_all=filter(one_data_frame_to_rule_them_all,!duplicated(one_data_frame_to_rule_them_all$MarkerName))
+one_data_frame_to_rule_them_all[!duplicated(one_data_frame_to_rule_them_all$MarkerName), ]
+rownames(one_data_frame_to_rule_them_all) = one_data_frame_to_rule_them_all$MarkerName
+one_data_frame_to_rule_them_all = one_data_frame_to_rule_them_all[,-1]
+Index = which(abs(one_data_frame_to_rule_them_all$Clapbeat)>1.96 | abs(one_data_frame_to_rule_them_all$Dyslexia)>1.96)
+one_data_frame_to_rule_them_all_forCor = one_data_frame_to_rule_them_all[-Index,]
+correlation_matrix = cor(one_data_frame_to_rule_them_all_forCor)
+
+
+bipnoukbb_ad.shet = SHet(one_data_frame_to_rule_them_all, 
+                      SampleSizes, 
+                      correlation_matrix,correct = 1,isAllpossible = T)
+
+p.shet= pchisq(bipnoukbb_ad.shet, df = 1, ncp = 0, lower.tail = F)
+shet = cbind(bipnoukbb_ad.shet, p.shet)
+shet2 = merge(shet, f_2_1[,c("rsid","Allele1","Allele2","CHR","POS")], by.x="row.names", by.y="rsid")
+shet2$CHR = as.numeric(gsub("X", "23", shet2$CHR))
+
+library(qqman)
+png("SHet_results_QQplot.png", type="cairo")
+qq(shet2$p.shet)
+dev.off()
+png("SHet_results_Manhattanplot.png", type="cairo", width=2000, height=500)
+shet2$POS<-as.numeric(shet2$POS)
+manhattan(shet2, chr = "CHR", bp = "POS", p = "p.shet", snp = "Row.names", col = c("dodgerblue3", "grey80"), chrlabs = NULL, suggestiveline = -log10(5e-08), genomewideline = -log10(5e-08), highlight = NULL, logp = TRUE, annotatePval = NULL, annotateTop = NULL)
+dev.off()
+write.table(shet2, "SHet_results.txt", col.names=TRUE, row.names=FALSE, quote = FALSE, sep="\t")
+aa<-shet2[which(shet2$p.shet<=5e-8),]
+write.table(aa, "SHet_results_pshet5e-8.txt", col.names=TRUE, row.names=FALSE, quote = FALSE, sep="\t")
+b<-shet2[which(shet2$bipnoukbb_ad.shet<=5e-8),]
+write.table(b, "SHet_results_shet5e-8_all.txt", col.names=TRUE, row.names=FALSE, quote = FALSE, sep="\t")
+

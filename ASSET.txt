@@ -1,0 +1,40 @@
+##group 1: reading alzheimer's disease and post-traumatic stress disorder.
+##group 2: reading alzheimer's disease and anxiety disorders.
+##group 3: reading alzheimer's disease and major depressive disorder.
+
+library('ASSET')
+library('dplyr')
+library('data.table')
+data1 <-fread('AD.txt',header=T)
+data2 <-fread('MDD.txt',header=T)
+de=data2[which(data2$SNP %in% data1$SNP),]
+db=data1[which(data1$SNP %in% data2$SNP),]
+nrow(de)
+nrow(db)
+beta = as.matrix(data.frame(data1 = de$BETA,data2 = db$BETA,row.names= db$SNP))
+sigma = as.matrix(data.frame(data1 = de$SE,data2 = db$SE,row.names = db$˜SNP))
+case = as.matrix(data.frame(data1 = rep(65075,length(db$SNP)),data2 = rep(8779,length(db$SNP)),row.names  = db$SNP))
+control = as.matrix(data.frame(data1 = rep(232552,length(db$SNP)),data2 = rep(1001875,length(db$SNP)),row.names = db$SNP))
+SNPs = db$SNP
+Study=c('data1','data2')
+res_ASSET <- h.traits(SNPs, Study, beta, sigma, case, control, meta=TRUE)
+res_2sides = h.summary(res_ASSET)$Subset.2sided
+a=res_2sides[which(res_2sides$Pvalue<=0.00000005),]
+pleiotropy = rep(0,dim(a)[1])
+sig_p1=which(a$Pvalue.1<0.05)
+sig_p2=which(a$Pvalue.2<0.05)
+pleiotropy[sig_p1]=pleiotropy[sig_p1]+as.numeric(lapply(strsplit(as.character(a[sig_p1,"Pheno.1"]),split=',', fixed=TRUE),length))
+pleiotropy[sig_p2]=pleiotropy[sig_p2]+as.numeric(lapply(strsplit(as.character(a[sig_p2,"Pheno.2"]),split=',', fixed=TRUE),length))
+res_2sides_edit=cbind(a,pleiotropy)
+path2='PATH'
+colnames(res_2sides_edit)<-c('snp','pval','pval_p','pval_n','OR_p','CI.l.p','CI.h.p','OR_n','CI.l.n','CI.h.n','pheno.p','pheno.n','pleiotropy')
+write.table(res_2sides_edit,
+            paste(path2,"RESULTS.txt",sep="/"),
+            quote = FALSE,
+            sep="\t",
+            row.names = FALSE)
+sessionInfo()
+sss <- res_2sides[which(res_2sides$Pvalue<=0.00000005),]
+write.table(sss, file = "out.txt", row.names = F, quote = F, sep="\t")
+yyds <- as.matrix(res_ASSET$Meta$beta)
+write.table(yyds, file = "out_beta.txt", row.names = T, quote = F, sep="\t")
